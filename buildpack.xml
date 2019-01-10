@@ -1,0 +1,63 @@
+<?xml version="1.0"?>
+
+<!-- 
+     This script builds only the pack.jar.
+     The resulting classes are 1.3 compatible
+  -->
+
+<project name="jutil" basedir="." default="jar">
+
+<property name="src" location="${basedir}/source"/>
+<property name="bin" location="${basedir}/classes"/>
+<property name="lib" location="${basedir}/lib"/>
+<property name="jar.file.name" location="pack"/>
+<property name="jar.file" location="${jar.file.name}.jar"/>
+<property name="jar.file.path" location="${basedir}/${jar.file.name}.jar"/>
+
+<!-- check that Ant classes are in classpath -->
+<target name="check.ant.lib">
+    <condition property="task.class.unavailable" >
+        <not>
+            <available classname="org.apache.tools.ant.Task"/>
+        </not>
+    </condition>
+</target>
+
+<!-- create the target directory if necessary, and make sure it's empty, since we're compiling for 1.3 -->
+<target name="init" depends="check.ant.lib">
+    <mkdir dir="${bin}"/>
+    <delete>
+     <fileset dir="${bin}">
+      <include name="**/*.class"/>
+     </fileset>
+    </delete>
+</target>
+
+<!-- fail if ant classes aren't in classpath -->
+<target name="fail.1" if="task.class.unavailable">
+    <fail msg="Please put the ant libraries in classpath"/>
+</target>
+
+<!-- compile only the Pack class. The involved classes must be 1.3 compatible. -->
+<target name="compile" depends="init">
+    <javac srcdir="${src}"
+           destdir="${bin}"
+           target="1.3">
+     <patternset id="pack.source">
+      <include name="org/sadun/util/ant/*.java"/>
+      <exclude name="*.java"/>
+     </patternset>
+    </javac>
+</target>
+
+<!-- jar the result -->
+<target name="jar" depends="compile">
+    <jar destfile="${jar.file}"
+         basedir="${bin}"
+         includes="**/*.class"
+         index="yes"/>
+</target>
+
+
+
+</project>

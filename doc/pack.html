@@ -1,0 +1,173 @@
+<html>
+<head>
+<title>The &lt;pack&gt; Ant Task</title>
+</head>
+<body bgcolor=white text=navy>
+<font face="Helvetica" size=+3>
+The <b><code>&lt;pack&gt;</code></b> Ant Task
+</font>v1.7 <font size=-2><a href="#changes">(change history)</a></font>
+<br>
+<font size=-3>
+<i>&copy; Copyright 2001,2002 dr. Cristiano Sadun - this software is released under the Lesser General Public License.</i>
+</font>
+<hr>
+<font face="Helvetica">
+<div align="justify">
+<p>
+<b>1. Purpose</b>
+<p>
+<b><code>&lt;pack&gt;</code></b> is a task which, given a set <b>C</b> of compiled Java&trade; classes, computes the <i>support set</i> for <b>C</b> - that is, the set of classes which the classes in <b>C</b> depend upon - and create a JAR containing all and only the classes needed to run <b>C</b>.
+<p>
+In other words, <b>it builds the smallest JAR possible to link and run any given class</b>.
+<p>
+From version 1.6, also automatic packing of entire packages is supported. Please see <a href="#packing_packages_notes"><b>Notes on using <tt>packages</tt> instead of <tt>classes</tt></b></a> below.
+<p>
+Additional features comprise the definition of a <tt>Main-Class</tt> and a <tt>Class-Path</tt> for the JAR, plus the possibility of explicitly adding additional classes (and their support sets) and files.
+<p>
+<i>Note</i>: <b><code>&lt;pack&gt;</code></b> analyzes classfiles to discover dependencies; it cannot, however, detect classes which are linked or loaded <i>indirectly</i> (via <tt>Class.forName</tt> or similar mechanism), as such classes can even be completely undetermined until runtime (imagine some code that obtains a class name from the user, and attempts to load the class via <tt>Class.forName</tt>).
+<p>
+However, if such classes are <i>known</i> when the packing occurs, the &quot;additionalClass&quot; subelement of <code>&lt;pack&gt;</code></b> can be used to explicitly include them in the produced JAR while visually distinguishing them from the core packed classes.
+<p>
+Similarly, the &quot;ignoreClass&quot; elements can be used to explicitly ignore classes.
+<p>
+<b>2. Defining the task in an Ant build script</b> (typically <i>build.xml</i>)
+<p>
+As any external Ant task, <b><code>&lt;pack&gt;</code></b> needs to be defined in your build script. <b><code>&lt;pack&gt;</code></b> lives in the <code><b>org.sadun.util.ant</b></code> package, which in turn is contained in the <b>org.sadun.util.jar</b> library, and its class name is <code><b>Pack</b></code>. Therefore, add an entry
+<pre>
+&lt;<b>taskdef</b> name="pack" classname="org.sadun.util.ant.Pack"
+ classpath="<i>..pathname...</i>/org.sadun.util.jar"/&gt;
+</pre>
+in your <b><code>&lt;project&gt;</code></b> (where <tt>classpath</tt> is the path to the <tt>org.sadun.util.jar</tt> library) to be able to use <b><code>&lt;pack&gt;</code></b>.
+<p>
+<b>3. Task attributes and subelements</b>
+<p>
+The following are attributes of the <b><code>&lt;pack&gt;</code></b> element.
+<p>
+
+<table width=85% border align=center>
+<tr align=center bgcolor=yellow><td><b>Attribute</b></td><td><b>Type</b></td><td><b>Description</b></td></tr>
+<tr><td><b><code>classes</code></b></td><td>(<font size=-1 color=red><b>mandatory (*)</b></font>)</td><td>A <i>comma-separated list</i> of classes to pack.</td></tr>
+<tr><td><b><code>packages</code></b></td><td>(<font size=-1 color=red><b>mandatory (*)</b></font>)</td><td>A <i>comma-separated list</i> of packages to pack.</td></tr>
+<tr><td><b><code>classpath</code></b></td><td>(<font size=-1 color=darkgreen><b>optional</b></font>)</td><td>Classpath to use when packing classes. <br> A nested standard Ant &lt;<code>classpath</code>&gt; element can be also used (see Ant documentation for details).
+<br>The classpath is initialized according to the value of <a href="http://ant.apache.org/manual/sysclasspath.html"><b>build.sysclasspath</b></a> (which in turn is valued <tt>"first"</tt> by default, for backwards compatibility).</td></tr>
+<tr><td><b><code>targetJar</code></b></td><td>(<font size=-1 color=red><b>mandatory</b></font>)</td><td>The name of the <b>jar</b> file to produce.</td></tr>
+<tr><td><b><code>mainfestClassPath</code></b></td><td>(<font size=-1 color=darkgreen><b>optional</b></font>)</td><td>The manifest <tt>Class-Path</tt> entry.</td></tr>
+<tr><td><b><code>mainfestMainClass</code></b></td><td>(<font size=-1 color=darkgreen><b>optional</b></font>)</td><td>The manifest <tt>Main-Class</tt> entry.</td></tr>
+<tr><td><b><code>excludePkg</code></b></td><td>(<font size=-1 color=darkgreen><b>optional</b></font>)</td><td>A <i>comma-separated list</i> of package prefixes to exclude. <br>Defaults to <tt>java,javax,sun</tt>.</td></tr>
+<tr><td><b><code>includePkg</code></b></td><td>(<font size=-1 color=darkgreen><b>optional</b></font>)</td><td>A <i>comma-separated list</i> of package prefixes to include. Only classes in matching packages will be included. Has lower precedence than <b>excludePkg</b>.</td></tr>
+<tr><td><b><code>resolveFiltered</code></b></td><td>(<font size=-1 color=darkgreen><b>optional</b></font>)</td><td>If  <b>true</b>, allows resolution of classes which are filtered out. Defaults to  <b>false</b></td></tr>
+
+
+
+<tr><td><b><code>cacheClassFiles</code></b></td><td>(<font size=-1 color=darkgreen><b>optional</b></font>)</td><td>If  <b>false</b>, disables classfile caching, which slows down the packing process but saves memory. Defaults to  <b>true</b></td></tr>
+
+</table>
+<p>
+(*) <b>classes</b> and <b>packages</b> are alternative.
+<p>
+The classes specified by <b>classes</b> and all the classes in their supporting set must be in Ant classpath or in the classpath specified by the optional <b>classpath</b> attribute. In other words, if your classes use some libraries, etc, they must be in classpath.
+<p>
+<table width=80% border align=center>
+<tr align=center bgcolor=yellow><td><b>Subelement/attribute</b></td><td><b>Description</b></td></tr>
+<td colspan=2><b><code>&lt;resource&gt;</code></b></td></tr>
+<td>&nbsp;&nbsp;&nbsp;<b><code>name=&quot;</b><i>resource name</i><b>&quot;</code></b></td><td>the name of the resource to add</td></tr>
+<td colspan=2><b><code>&lt;additionalclass&gt;</code></b></td></tr>
+<td>&nbsp;&nbsp;&nbsp;<b><code>name=&quot;</b><i>classname</i><b>&quot;</code></b></td><td>the name of the additional class to add</td></tr>
+<td colspan=2><b><code>&lt;ignoreclass&gt;</code></b></td></tr>
+<td>&nbsp;&nbsp;&nbsp;<b><code>name=&quot;</b><i>classname</i><b>&quot;</code></b></td><td>the name of the class to ignore</td></tr>
+<tr><td><b><code>&lt;additionalfileset&gt;</code></b></td><td>A standard Ant &lt;<code>fileset</code>&gt; element (see Ant documentation for details).</tr>
+<tr><td><b><code>&lt;classpath&gt;</code></b></td><td>A standard Ant &lt;<code>classpath</code>&gt; element (see Ant documentation for details).</tr>
+</table>
+<p>
+The classes defined by <b><code>&lt;additionalclass&gt;</code></b> must
+<ul>
+<li>be in classpath;
+<li>not conflict with the filter established by <b><code>excludePkg</code></b>/<b><code>includePkg</code></b>.
+</ul>
+<p>
+<p>Resources names defined by <b><code>&lt;resource&gt;</code></b> can be given both in zip path form (for example, <tt>my/package/MyResources.properties</tt>) or in java-package form (for example, <tt>my.package.MyResource.properties</tt>).
+<a name="packing_packages_notes">
+<p>
+<b>Notes on using <tt>packages</tt> instead of <tt>classes</tt></b>
+<p>
+The <b>packages</b> attribute is a fast way to avoid listing the entire contents of a package in the "classes" attribute or by using <b>&lt;additionalClass&gt;</b> subelements.
+<p>
+However, this leaves <b>pack</b> with the task of finding out which classes belong to which package. This information may actually <i>vary for different JVMs settings or even for different runtimes with the same settings</i> (depending for example on the used ClassLoaders, user-defined classpath, etc).
+<p>
+To do the job, the current version of <b>pack</b> employs a <a href="http://cvs.sourceforge.net/cgi-bin/viewcvs.cgi/sadun-util/Utility%20classes/source/org/sadun/util/SimpleClassPackageExplorer.java">java package explorer</a> object for that purpose, which scans the classpath indicated by the <b>classpath</b> attribute or classpath subelements. The current implementation of that object has certain limitations, in particular:
+<p>
+<ul>
+<li> supports only classes residing in filesystem
+<li> does not support sealed JARs
+<li> does not track multiple versions of the same class
+</ul>
+<p>
+Therefore, be aware that using <b>packages</b> may lead to incorrect results in situations which do not fall within the limitations above.
+</a>
+<p>
+<b>4. Examples</b>
+<p>
+The following definition will create a runnable JAR with all the classes necessary for running <tt>my.test.pkg.Test</tt> which makes use of the <tt>my.library.jar</tt> library:
+<pre>
+	&lt;<b>pack</b> classes=&quot;my.test.pkg.Test&quot;
+	      classpath=&quot;my.library.jar&quot;
+	      manifestMainClass=&quot;my.test.pkg.Test&quot;/&gt;
+</pre>
+<p>
+The following definition will create a runnable JAR as above, but adding the entire library to the JAR and adding the relative <tt>Class-Path</tt> entry to the Manifest. Only the classes whose fully qualified name is prefixed with <tt>my.test</tt> are included in the resulting jar:
+<pre>
+	&lt;<b>pack</b> classes=&quot;my.test.pkg.Test&quot;
+	      classpath=&quot;${basedir}/my.library.jar&quot;
+	      manifestMainClass=&quot;my.test.pkg.Test&quot;
+	      <font color=red>includePkg=&quot;my.test&quot;
+	      manifestClassPath=&quot;./my.library.jar&quot;&gt;
+           &lt;<b>additionalfileset</b> dir=&quot;${basedir}&quot;&gt;
+             &lt;<b>include</b> name=&quot;my.library.jar&quot;/&gt;
+           &lt;<b>/additionalfileset</b>&gt;</font>
+	&lt;<b>/pack</b>&gt;
+</pre>
+The following definition will also include explicitly the <tt>an.other.Class</tt> class and the resource <tt>an.other.Resource.properties</tt>:
+<pre>
+	&lt;<b>pack</b> classes=&quot;my.test.pkg.Test&quot;
+	      classpath=&quot;${basedir}/my.library.jar&quot;
+	      includePkg=&quot;my.test&quot;
+	      manifestMainClass=&quot;my.test.pkg.Test&quot;
+	      manifestClassPath=&quot;./my.library.jar&quot;&gt;
+           &lt;<b>additionalfileset</b> dir=&quot;${basedir}&quot;&gt;
+             &lt;<b>include</b> name=&quot;my.library.jar&quot;/&gt;
+           &lt;<b>/additionalfileset</b>&gt;
+           <font color=red>&lt;<b>additionalclass</b> name=&quot;an.other.Class&quot;/&gt;</font>
+           <font color=red>&lt;<b>resource</b> name=&quot;an.other.Resource.properties&quot;/&gt;</font>
+	&lt;<b>/pack</b>&gt;
+</pre>
+<p>
+The following definition will create a runnable JAR with all the classes and necessary for linking the entire package <tt>my.test.pkg</tt> which makes use of the <tt>my.library.jar</tt> library (see also the <a href="#packing_packages_notes">notes</a> above):
+<pre>
+	&lt;<b>pack</b> packages=&quot;my.test.pkg&quot;
+	      classpath=&quot;my.library.jar&quot;
+	      manifestMainClass=&quot;my.test.pkg.Test&quot;/&gt;
+</pre>
+<p>
+<b>5. Downloading</b>
+<p>
+<b><code>&lt;pack&gt;</code></b> is part of the package <a href="http://sadun-util.sourceforge.net">sadun-util</a> whose source and binary form can be downloaded from <a href="https://sourceforge.net/projects/sadun-util/">sourceforge</a>.
+<p>
+<a name="changes"><b>6. Change history</b></a>
+<p>
+	<ul>
+		<li>v1.0	First public version</li>
+		<li>v1.1	Various bugfixes</li>
+		<li>v1.2	Added documentation and additional classes/file sets support</li>
+		<li>v1.3	Exposed resources support via <tt>&lt;resource&gt;</tt> subelements</tt></li>
+		<li>v1.4	Exposed classfile caching</li>
+		<li>v1.5    Fixed problem in JAR creation (File.separator instead of / used); added <tt>ignoreClass</tt>
+		<li>v1.6    Added <b>packages</b> shortcut as an alternative for <b>classes</b>
+		<li>v1.7    Added support for <b>build.sysclasspath</b>
+	</ul>
+</div>
+</font>
+<hr>
+<font size=-3>
+<i>&copy; Copyright 2001,2002 dr. Cristiano Sadun - this software is released under the Lesser General Public License.</i>
+</font>
+</body>

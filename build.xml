@@ -1,0 +1,155 @@
+<?xml version="1.0"?>
+<project name="jutil" basedir="." default="jar">
+
+<property name="source.dir.name" value="source"/>
+<property name="bin.dir.name" value="classes"/>
+<property name="lib.dir.name" value="lib"/>
+<property name="doc.dir.name" value="doc"/>
+<property name="apidoc.dir.name" value="api"/>
+<property name="jar.file.name" location="org.sadun.util"/>
+
+<property name="src" location="${basedir}/${source.dir.name}"/>
+<property name="bin" location="${basedir}/${bin.dir.name}"/>
+<property name="lib" location="${basedir}/${lib.dir.name}"/>
+<property name="doc" location="${basedir}/${doc.dir.name}"/>
+<property name="apidoc" location="${doc}/${apidoc.dir.name}"/>
+<property name="jar.file" location="${jar.file.name}.jar"/>
+<property name="api.doc.title" value="Cristiano Sadun's Java utility classes - API documentation"/>
+
+<!--
+
+     Note: if you're getting an error
+
+            "taskdef class org.sadun.util.ant.Pack cannot be found"
+
+     you are missing pack.jar - which must be compiled separately by
+     using the buildpack.xml build file (by running ant -f buildpack.xml)
+
+  -->
+<taskdef name="pack"
+         classname="org.sadun.util.ant.Pack"
+         classpath="${basedir}/pack.jar"/>
+
+<!--
+
+     Note: if you're getting an error
+
+            "taskdef class org.sadun.util.ant.Version cannot be found"
+
+     you are missing version.jar - which must be compiled separately by
+     using the buildversion.xml build file (by running ant -f buildversion.xml)
+
+  -->
+<taskdef name="version" classname="org.sadun.util.ant.Version"
+	     classpath="version.jar"/>
+
+ <target name="init">
+  <mkdir dir="${bin}"/>
+ </target>
+
+ <!-- version and build info -->
+ <target name="version">
+  <version packageName="org.sadun.util"
+  		   versionObjectSourcePath="${src}"
+  		   versionObjectBinaryPath="${bin}"
+  		   versionInfoPath="${basedir}\.org.sadun.util1.13.0.versionInfo"
+  		   override='true'
+  		   major="1"
+  		   minor="13"
+  		   micro="0"/>
+ </target>
+
+ <!-- 1.4 compile -->
+ <target name="compile" depends="init, version">
+    <javac srcdir="${src}"
+           destdir="${bin}"
+           target="1.4"
+           source="1.4">
+	<classpath id="build.classpath">
+	  <fileset dir="${lib}">
+	    <include name="**/*.jar"/>
+	  </fileset>
+	</classpath>
+
+   </javac>
+ </target>
+
+ <!-- jar the result -->
+ <target name="jar" depends="compile">
+    <jar destfile="${jar.file}"
+         basedir="${bin}"
+         includes="**/*.class"
+         index="yes"/>
+ </target>
+
+ <target name="javadoc">
+  <javadoc sourcepath="${src}"
+           destdir="${apidoc}"
+           author="yes"
+           doctitle="${api.doc.title}"
+           packagenames="*"
+           source="1.4"
+           header="Copyright (C) 1999,2004 dr. Cristiano Sadun"
+           footer="Copyright (C) 1999,2004 dr. Cristiano Sadun">
+     <classpath>
+	  <fileset dir="${lib}">
+	    <include name="**/*.jar"/>
+	  </fileset>
+	</classpath>
+  </javadoc>
+ </target>
+
+ <!-- cleanup everything but source and nongenerated docs -->
+ <target name="clean">
+	 <delete file="${bundle.file}"/>
+	 <delete file="${libs.bundle.file}"/>
+     <delete>
+     <fileset dir="${bin}">
+      <include name="**/*.class"/>
+     </fileset>
+    </delete>
+    <delete>
+     <fileset dir="${apidoc}">
+      <include name="**/*.*"/>
+     </fileset>
+    </delete>
+    <delete file="${jar.file}"/>
+
+ </target>
+
+ <!-- create a file with the necessary libraries in one piece -->
+ <target name="bundlelib">
+
+  <property name="libs.bundle.file.name" location="org.sadun.util.libs_${version}"/>
+  <property name="libs.bundle.file" location="${libs.bundle.file.name}.zip"/>
+
+	   <delete file="${libs.bundle.file}"/>
+       <zip destfile="${libs.bundle.file}">
+         <zipfileset dir="${lib}" prefix="${lib.dir.name}">
+	      <include name="*.jar"/>
+	      <include name="readme.txt"/>
+         </zipfileset>
+      </zip>
+ </target>
+
+ <!-- create the distribution bundle -->
+ <target name="bundle" depends="jar, javadoc, bundlelib">
+
+ <property name="bundle.file.name" location="org.sadun.util_${version}"/>
+ <property name="bundle.file" location="${bundle.file.name}.zip"/>
+
+ 	  <delete file="${bundle.file}"/>
+      <zip destfile="${bundle.file}">
+         <zipfileset dir="${basedir}" includes="readme.txt"/>
+         <zipfileset dir="${basedir}" includes="build.xml"/>
+         <zipfileset dir="${basedir}" includes="buildpack.xml"/>
+         <zipfileset dir="${basedir}" includes="org.sadun.util.jar"/>
+         <zipfileset dir="${basedir}" includes="pack.jar"/>
+         <zipfileset dir="${doc}" prefix="${doc.dir.name}" includes="*.html"/>
+         <zipfileset dir="${apidoc}" prefix="${doc.dir.name}/${apidoc.dir.name} " includes="**/*.*"/>
+         <zipfileset dir="${src}" prefix="${source.dir.name}" includes="**/*.java"/>
+         <zipfileset dir="${src}" prefix="${source.dir.name}" includes="**/package.html"/>
+      </zip>
+ </target>
+
+</project>

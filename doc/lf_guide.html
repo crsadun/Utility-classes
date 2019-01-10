@@ -1,0 +1,486 @@
+<html>
+<head>
+<title>Listening framework user guide</title>
+</head>
+<body bgcolor=white>
+<font face="Garamond","Times" size=+3 color=navy>
+<b>Listening Framework </b>v2.0
+<br>
+</font>
+<font face="Garamond","Times" size=+2 color=navy>
+User Guide
+</font>
+<br>
+<i>Copyright &copy; 1998,99, 2003 Cristiano Sadun - All rights reserved</i>
+<hr>
+<font face="Verdana","Helvetica" size=-1 color=navy>
+<br>
+This software is licensed under <a href="http://www.gnu.org/licenses/gpl.html">GPL</a>.
+<div align=justify>
+<p>
+<font size=+1>
+Table of contents
+</font>
+<hr>
+<ol>
+<li><a href="#1">Purpose</a>
+<li><a href="#2">Creating a client class</a>
+<li><a href="#3">Creating a server class</a>
+<li><a href="#4">Signals</a>
+<li><a href="#5">Handling Exceptions</a>
+<li><a href="#6">Threading considerations</a>
+<li><a href="#7">Additional listeners</a>
+<li><a href="#8">The SignalSource interface</a>
+</ol>
+<p>
+<hr>
+<p>
+<b>Change History</b>
+<p>
+<ul>
+<li><b>v2.0</b> first open source release
+<ul>
+<li> signature-compatible with version 1.0 (added <a href="#ble">BlockedListenerException</a>)
+<li> optimized internal signal queueing mechanism
+<li> added handling of blocked listeners
+</ul>
+<p>
+<li><b>v1.0</b> original non-open source release
+</ul>
+<p>
+<b><a name="1">1. Purpose</a></b>
+<p>
+This framework allows Java objects to easily embed support to
+receive or transmit <i>asynchronous signals</i> (aka events) to other
+objects, in a manner similar to the standard <tt>java.awt</tt> event
+processing.
+This includes normal "passive" objects and thread objects.
+<p>
+For example, let's suppose a thread is executing a heavy duty
+task which will likely take some time to finish.
+<p>
+An external class ("client") is interested into the outcome of the task.
+A straightforward way to check for the results is to poll the thread state
+waiting until it has reached a "task finished" state, with code like
+this:
+<p>
+<pre>
+// "t" is a reference to the working thread
+while (! t.hasFinished()) {
+	..output something...
+}
+</pre>
+<br>
+This approach has various drawbacks: it implies busy waiting by the
+client class; the client class must have explicit access and knowledge
+of the internal state of the thread, or the latter must implement a
+specific interface (like the hasFinshed() method above), and later
+updates to the task-thread may require the knowledge of different
+states, therefore requiring the amendment of the interface and
+all the client code.
+<p>
+A different approach would be possible if the client could simply
+"register" as interested in the outcome of the results, and then
+be directly (and asynchronously) notified by the working thread
+when the job is done. In the meanwhile, the client class can go on
+executing his own job (maybe in a different thread, maybe not).
+<p>
+This framework supports exactly this kind of behaviour, allowing
+"server" classes to expose a registry, to which client classes
+can register; and establishing a protocol for event notification
+from server classes to clients. The code can be easily "plugged in"
+in a fast and efficient way.
+<p>
+See the <a href="doc/packages.html">javadoc documentation</a>
+for detailed reference.
+<p>
+<b><a name="2">2. Creating a client class </A></b>
+<p>
+A client object is a object which is interested in receiving
+Signals - is "listening" to them. To indicate such a role,
+any client object shall implement the
+<a href="doc/com.deltax.util.listener.Listener.html">Listener</a>
+interface.
+<p>
+This interface declares just one method <b>receive</b>, which will
+be called when a signal is received.
+<p>
+<pre>
+import com.deltax.util.listener.*;
+
+public StatusPanel extends java.awt.Frame <font color=red>implements Listener</font> {
+
+  ...code..
+
+  <font color=red>
+  public void receive(Signal s) {
+	 statusLabel.setText("Job finished!");
+	 repaint();
+  }
+  </font>
+
+}
+</pre>
+<p>
+The class above is an imaginary "status window" of an application (extends
+java.awt.Frame) and declares itself as able to "listen" to signal sources
+(implementing the interface).
+<br>The implementation shown above just changes a GUI label upon any signal
+receiving. As we will see later, real implementations are likely to
+discriminate upon the received signal and undertake different actions
+depending on it. The framework provides already different flavours of
+signals ("Signal" being the simplest and anonymous one) and ad hoc
+signals can be created by your application.
+<p>
+See <a href="#3.4"><i>Client Registration</i></a> for code that registers a listener client to a signal source.
+<p>
+<b><a name="3">3. Creating a server class</A></b>
+<p>
+<i>Signals</i>
+<p>
+A server class is a potential generator of asynchronous events
+(<b>Signal</b>s in the framework's denotation). A Signal is much
+like a java.awt.Event, and is implemented in the java class
+<a href="doc/com.deltax.util.listener.Signal.html">Signal</a>
+(which is a very simple, "base" signal) and various subclasses.
+<p>
+<i>ListenerSupport</i>
+<p>
+Besides, a server class mantains a registry of clients interested in
+receiving signals. This registry is implemented in the class
+<a href="doc/com.deltax.util.listener.ListenerSupport.html">ListenerSupport</a>
+which will simply be a private member of the server class.
+<p>
+This class is the core class for servers, as much of the functionality
+is encapsulated therein.
+<p>
+<pre>
+import com.deltax.util.listener.*;
+
+public class HeavyThread extends Thread {
+
+  <font color=red>private ListenerSupport ls = new ListenerSupport();</font>
+
+  public HeavyThread() {	// Class constructor
+  	...
+  }
+
+  public void run() { // Thread loop
+  	...heavy job...
+  }
+
+}
+</pre>
+<p>
+The class above is a Thread (that's just for example) and owns a
+<b>ListenerSupport</b> object referenced by <b>ls</b>.
+<p>
+<i>Bridging registry support</i>
+<p>
+ListenerSupport provides four services: three for registry handling and
+one for notification. Let's have a look to the first three, the methods
+<b>addListener</b>, <b>removeListener</b> and <b>isRegistered</b>.
+<p>Such methods allow to add a client class to the registry, and our
+server class will likely provide <i>bridge</i> methods to them:
+<p>
+<pre>
+  ...HeavyThread code as above..
+
+  public void addListener(Listener l) {
+  	ls.addListener(l);
+  }
+
+  public void removeListener(Listener l) {
+  	ls.removeListener(l);
+  }
+
+  public boolean isRegistered(Listener l) {
+  	return ls.isRegistered(l);
+  }
+</pre>
+<p>
+This means that client object will be able to call such methods on
+HeavyThread, and this will carry on the call to the ListenerSupport,
+which holds the actual registry.
+<p>
+<i><a name="3.4">Client registration</a></i>
+<p>
+A client can then register by simply invoking the methods like in:
+<p>
+<pre>
+  public StatusPanel() {	// Constructor for StatusPanel, see 2.
+  	super("Status Panel");           // Invoke "Frame" constructor
+	Thread t = new HeavyThread();    // Create a HeavyThread
+  	<font color=red>t.registerListener(this);        // Register itself as listener</font>
+  	t.start();                       // Run the thread
+  }
+</pre>
+<p>
+In the code above, the example class StatusPanel (which implements <b>Listener</b>, see <a href="#2">2.</a>) creates a new HeavyThread
+and register itself as a listern to signals generated by such source.
+<p>
+<i>Notifying listeners</i>
+<p>
+Let's now see how the actual notification is performed. In server code
+(which is HeavyThread, in our example) there is already a <b>ListenerSupport</b> member (named <b>ls</b> in the example); to notify listeners, it is sufficient to create the appropriate Signal object and call the <b><a href="doc/com.deltax.util.listener.ListenerSupport.html#notify(com.deltax.util.listener.Signal)">notify()</a></b> method of <b>ls</b>. For example, to notify that the heavy task is finished, the run method in HeavyThread will look like this:
+<p>
+<pre>
+   public void run() {
+
+     ..do heavy job..
+     <font color=red>
+     Signal s = new Signal(this);  // Creates a new Signal object
+     ls.notify(s);                 // Notify all the listeners
+     </font>
+   }
+</pre>
+<p>
+The code above will create a Signal object and invoke the notify method,
+which will notify (which is, invoke the "receive" method) of all the registered listeners.
+<p>
+<a name="ble">
+Version 2.0 of the library introduces a <a href="api/com/deltax/util/listener/BlockedListenerException.html">BlockedListenerException</a>
+exception which is raised when a remove operation is attempted on a lister which doesn't unblock (i.e. is stuck in the <a href="api/com/deltax/util/listener/Listener.html#receive(com.deltax.util.listener.Signal)">receive()</a> method) within a certain <a href="api/com/deltax/util/listener/Listener##setReceiveTimeout(long)">timeout</a>. Note that <a href="api/com/deltax/util/listener/BlockedListenerException.html">BlockedListenerException</a> is an unchecked exception - so it's up to
+your client code to decide whether or not handle it explicitly.
+</a>
+<p>
+<b><a name="4">4. Signals</a></b>
+<p>
+The minimum amount of information that must be provided when creating a Signal is the source object which is creating the signal itself: the class <a href="doc/com.deltax.util.listener.Signal.html">Signal</a> encapsulates just this simple signal, which is therefore called <i>anonymous</i>.
+<p>
+Three other Signal classes are built-in in the framework: <a href="doc/com.deltax.util.listener.MsgSignal.html">MsgSignal</a>,
+<a href="doc/com.deltax.util.listener.TimeStampedSignal.html">TimeStampedSignal</a>
+and
+<a href="doc/com.deltax.util.listener.ExceptionSignal.html">ExceptionSignal</a>.
+This last one is illustrated in the <a href="#5">Handling Exceptions</a> chapter; <a href="doc/com.deltax.util.listener.MsgSignal.html">MsgSignal</a> extends Signal by adding a message; the server code can provide information about the specific kind of signal in the message. <br>For example, in HeavyThread class... (signal source):
+<pre>   <font color=green>// Source-specific information</font>
+   <font color=red>public static final String TASK_FINISHED = "Completed";
+   public static final String TASK_ABORTED = "Aborted";</font>
+
+   public void run() {
+
+     ..do heavy job..
+
+     <font color=red>MsgSignal s;
+     if (suceeded) s = new MsgSignal(this, TASK_FINISHED);
+     else s = new MsgSignal(this, TASK_ABORTED);
+     </font>
+     ls.notify(s);                 // Notify all the listeners
+   }
+</pre>
+<p>
+and in StatusFrame class... (listener):
+<pre>
+  <font color=red>public void receive(Signal s) {
+
+     <font color=green>// Cast to MsgSignal</font>
+     MsgSignal ms = (MsgSignal)s;
+
+     <font color=green>// Show the Msg in user interface</font>
+     statusLabel.setText("Job "+ms.getMsg());
+     repaint();
+
+     <font color=green>// Check the information</font>
+     if ( HeavyThread.TASK_ABORTED.equals(ms.getMsg()) ) {
+       // Pop up a window asking the user if he wants to retry, etc..
+       ....
+     }
+     repaint();
+  }</font>
+</pre>
+<p>
+An alternative method of identifying signal is, of course, to subclass
+Signal;  for example:
+<p>
+<pre>
+   public class HeavyThreadFinished extends Signal {
+     public HeavyThreadFinished(Object src) { super(src); }
+   }
+
+   public class HeavyThreadAborted extends Signal {
+     public HeavyThreadAborted(Object src) { super(src); }
+   }
+</pre>
+<p>
+then the client code will look like:
+<p>
+<pre>
+   public void receive(Signal s) {
+     if (s instanceof HeavyThreadAborted) ...
+     else if (s instanceof HeavyThreadFinished) ...
+     else <font color=green>// If signal is unknown, rais a runtime exception</font>
+          throw new RuntimeException(
+            "An unexpected signal "+s.getClass().getName()+" has been received"
+          );
+   }
+</pre>
+<p>
+Which tecnique is preferable depends of course  on your application design.
+<p>
+<a href="doc/com.deltax.util.listener.TimeStampedSignal.html">TimeStampedSignal</a>   simply carries information on the moment in which the event has been generated,
+represented as a standard <b>long</b> value.
+Such information can be retrieved by using the
+<a href="doc/com.deltax.util.listener.TimeStampedSignal.html#getTime()">getTime()</a> method, as in:
+<pre>
+   public synchronized void receive(Signal s) {
+   	if (s instanceof TimeStampedSignal) {
+   	  java.util.Date d = new Date( (TimeStampedSignal)s.getTime() );
+   	  System.out.println("Signal generated on "+d);
+   	}
+   	else System.out.println("Signal received");
+   }
+</pre>
+which simply prints receiving information.
+<p>
+<a name="5"><b>5. Handling Exceptions</b></a>
+<p>
+Sometimes a class wants to adopt a separate processing in case of unexpected conditions. The usual Java exception handling mechanism is not able to explicitly handle asynchronous exceptions (at least at application level), so a separate mechanism is provided in the framework to support this case.
+<p>
+<a href="doc/com.deltax.util.listener.ExceptionListener.html">ExceptionListener</a> extends the <a href="doc/com.deltax.util.listener.Listener.html">Listener</a> interface adding a method <b>receiveException</b>, which is used to receive signal of class <a href="doc/com.deltax.util.listener.ExceptionSignal.html">ExceptionSignal</a>.
+<br>
+A client class can decide to implement this interface. In this case,
+whenever the signal source notifies an ExceptionSignal, a call to
+<b>receiveException()</b> will occur, instead of <b>receive()</b>.
+<p>
+Note that the signal source class <i>shall not do anything special</i> to obtain this behaviour: just create and notify an <b>ExceptionSignal</b> instead of a <b>Signal</b>. This code fragment provides an example:
+<p>
+<pre>
+   ... HeavyThread code...
+
+   public void run() {
+
+     try {
+      ..do heavy job..
+      ls.notify(new Signal(this));  // Notify all the listeners of job completion
+     } catch (Exception e) {
+    <font color=red>  ls.notify(new ExceptionSignal(e, this)); <font color=green>// Notify all the listeners of exception</font></font>
+     }
+</pre>
+<p>
+The framework will take care of the proper dispatching.
+<p>
+<a name="6"><b>6. Threading considerations</b></a>
+<p>
+<i>Synchronization of </i><b>receive()</b>
+<p>
+(the discussion below holds for both <b>receive()</b> and <b>receiveException()</b>)
+<p>
+When implementing <b>receive()</b> in the listener code, it may need to be declared as <tt>synchronized</tt>, depending on the number of signal sources to which
+it's registered.
+<p>
+The main issue is that <b>a single signal source will not invoke receive()
+until the last signal has finished processing</b>; in other words, signalling occurs asynchronously with respect to the client's thread, but before being notified with another signal, the listener can complete the processing of
+the current signal.
+<p>
+This means that <font color=red>if a listener is registered with a single source, <b>receive()</b> does not need to be synchronized</font>.
+<p>
+If the listener registers itself with more than one source, however, the various sources do not know anything about each other but <b>receive()</b> is still the <i>single entry point</i> for signal notification from <b>all</b> the sources.
+Therefore, <font color=red>when a listener registers itself with more than one source, receive() <b>has</b> to be declared as synchronized</font> to avoid race conditions (which is, when a signal from a certain source is being processed, other signals are kept out of the method code).
+<p>This can be avoided only if the processing code is completely reentrant (this means that <i>any</i> method called in the processing thread is reentrant as well), a condition which is unlikely to hold, but for the simplest listeners.
+<br>
+An example of a completely reentrant listener is the <a href="doc/com.deltax.util.listener.StreamListener.html"><b>StreamListener</b></a> class provided by the framework, whose implementation of <b>receive()</b> is just a call to <b>System.out.println</b>. Since this last method <i>is</i> synchronized, and the code does not do anything else, this particular implementation is completely reentrant and therefore does not need to be declared synchronized. It should be obvious that this is due to the very simple form of processing code in such a case.
+<p>
+<i>Threading model for notification</i>
+<p>
+The signal flow is designed in such a way that's asynchronous with both the signal source and the signal listener.
+This means that:
+<p>
+- Signal source can issue multiple signals without waiting for the listener to
+process them;
+- Signal listeners can process signals without blocking the ability of the source to produce new signals;
+<p>
+However, as stated above, processing a signal from a certain source blocks the notification of other signals from the same source.
+<br>This means that, if the processing of a signal blocks, or does not terminate, the listener itself will never receive any more signals.
+<p>
+<a name="7"><b>7. Additional Listeners</b></a>
+<p>
+A number of pre-built Listener objects are provided with the framework.
+These can be aggregated in classes that do not want to directly
+implement the <b>Listener</b> interface, or for debug/development purposes.
+<p>
+<a href="doc/com.deltax.util.listener.StreamListener.html"><b>StreamListener</b></a>
+just prints out a description of any received signal to an output stream. By default, this stream is <b>System.out</b>, so that the net effect is to show received signals on the standard output.
+<p>
+<a href="doc/com.deltax.util.listener.BridgeListener.html"><b>BridgeListener</b></a>
+is designed to be attached to an existing listener, so that a description of the received signals is sent to a certain Writer besides being processed by the original listener. For example, considering the StatusPanel class (which implements Listener) of the previous examples, the constructor code may look like this:
+<p>
+<pre>
+  public StatusPanel() {	// Constructor for StatusPanel, see 2.
+    super("Status Panel");           // Invoke "Frame" constructor
+    Thread t = new HeavyThread();    // Create a HeavyThread<font color=red>
+    Writer w = new OutputStreamWriter(System.out);   // Create a writer to System.out
+    BridgeListener bl = new BridgeListener(w, this); // Bridges to <i>this</i>
+    t.registerListener(this);        // Register <b>the bridge</b> as listener</font>
+    t.start();                       // Run the thread
+  }
+</pre>
+<p>
+With this code, any signal generated by HeavyThread will be forwarded to this <i>after</i> having been written to the Writer.
+<p>
+<a href="doc/com.deltax.util.listener.HistoryListener.html"><b>HistoryListener</b></a> is simply a specialization of BridgeListener which uses a FileWriter, and allows to pass directly the file name at construction time. This allows to write to a file an history of the signals received by a certain listener.
+<p>
+<a name="8"><b>8. The SignalSource interface</b></a>
+<p>
+An interface <a href="doc/com.deltax.util.listener.SignalSource.html"><b>SignalSource</b></a>
+is provided. It <b>does not need</b> to be implemented by a signal source: it <i>may</i> be implemented to be able to explicitly recognized signal sources at program level (if needed), and is actually implemented by the two classes <a href="doc/com.deltax.util.listener.BaseSignalSource.html"><b>BaseSignalSource</b></a> and <a href="doc/com.deltax.util.listener.BaseSignalSourceThread.html"><b>BaseSignalSourceThread</b></a>.
+<p>
+The two classes are "plug&play" implementations of a signal source (which extends Object and Thread, respectively): they embed a <b>ListenerSupport</b> and provide the standard bridging methods to its functionality (see the code in <a href="#3">3</a>), while protecting the <b>notify()</b> methods (which must not be visible outside the signal source itself).
+<p>
+An application class can simply extend these classes, and directly use <b>notify()</b> and <b>notifyException()</b> to produce signals; for example:
+<p>
+<pre>
+  public class HeavyThread extends BaseSignalSourceThread {
+  
+    public void run() {
+      ...do the job...
+      
+      notify(new Signal(this));
+    }
+  }
+</pre>
+<p>
+The client code remains identical to <a href="#2">2</a>.
+As shown, when using <b>BaseSignalSource</b>s there's no need of
+declaring the listner support and the bridging methods.
+<p>
+<hr>
+<font size=-2>
+<i>Copyright &copy; 1998,99 Cristiano Sadun - All rights reserved</i>
+<br>
+Please read the <a href="license.html">License Agreement</a> before
+using the software and this manual in any way.
+</font>
+</font>
+<!-- START RedSheriff Measurement V4 - cgi HTML Newsletter -->
+<!-- COPYRIGHT 2001 Red Sheriff Limited -->
+<script  language="JavaScript">
+<!--
+var ref = unescape(document.URL);
+if (ref.length>=252) ref=ref.substring(0,252)+"...";
+var stringa="<img src=\"http://server-it.imrworldwide.com/cgi-bin/count?url="+ref+"&cid=it_matrix-it_0\" width=1 height=1>";
+document.write(stringa);
+document.write("<COMMENT>");
+//-->
+</script>
+<noscript>
+<img src="http://server-it.imrworldwide.com/cgi-bin/count?cid=it_Matrix-it_0" width=1 height=1>
+</noscript>
+</COMMENT>
+<!-- END RedMeasure V4 --><!-- START RedSheriff Measurement V4 - cgi HTML Newsletter -->
+<!-- COPYRIGHT 2001 Red Sheriff Limited -->
+<script  language="JavaScript">
+<!--
+var ref = unescape(document.URL);
+if (ref.length>=252) ref=ref.substring(0,252)+"...";
+var stringa="<img src=\"http://server-it.imrworldwide.com/cgi-bin/count?url="+ref+"&cid=it_matrix-it_0\" width=1 height=1>";
+document.write(stringa);
+document.write("<COMMENT>");
+//-->
+</script>
+<noscript>
+<img src="http://server-it.imrworldwide.com/cgi-bin/count?cid=it_Matrix-it_0" width=1 height=1>
+</noscript>
+</COMMENT>
+<!-- END RedMeasure V4 -->
+</body>
+</html>

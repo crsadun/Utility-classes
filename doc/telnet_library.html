@@ -1,0 +1,95 @@
+<head>
+<title>Telnet client library for Java&trade;</title>
+</head>
+<body>
+<font face="Helvetica">
+<table width="100%" border=0><tr><td><font size=+4 color="navy"><b>Telnet client library</b></font><br>
+<font size=-3><i>&copy; Copyright 2004, 2005 dr. Cristiano Sadun under <a href="http://www.fsf.org/licensing/licenses/lgpl.html">LGPL</a></i></font></td><td>
+<A href="http://sourceforge.net"> <IMG src="http://sourceforge.net/sflogo.php?group_id=65922&amp;type=5" width="210" height="62" border="0" alt="SourceForge Logo"></A></td></tr>
+</table>
+
+
+<p>
+<b>1. Purpose</b>
+<p>
+This library allows easy handling of programmatic telnet conversations in the Java&trade; programming language, i.e. situations where the only (or preferred) interface to a system consists of a set of shell commands to be executed after a successful login via telnet.
+<p>
+This library is <i>not</i> a graphical telnet client. There are many Java&trade; GUI clients for telnet out there, so there is no need for another one.
+<p>
+<b>2. Packaging</b>
+<p>
+The library is a part of my <a href="index.html">Utility classes</a> and doesn't come in a separate package. However, the main classes are the following :
+<p>
+<ul>
+<li><a href="http://sadun-util.sourceforge.net/api/org/sadun/util/TelnetInputStreamConsumer.html">TelnetInputStreamConsumer</a>
+<li><a href="http://sadun-util.sourceforge.net/api/org/sadun/util/TelnetNVTChannel.html">TelnetNVTChannel</a> and <a href="http://sadun-util.sourceforge.net/api/org/sadun/util/TelnetInputStream.html">TelnetInputStream</a>
+<li><a href="http://sadun-util.sourceforge.net/api/org/sadun/util/UnixLoginHandler.html">UnixLoginHandler</a>
+</ul>
+and any dependent classes can be easily extracted by using <a href="pack.html">pack</a> or simply downloading the <a href="http://cvs.sourceforge.net/viewcvs.py/sadun-util/Utility%20classes/source/">source</a> from CVS.
+<p>
+<b>3. Quick start</b>
+<p>
+The high level idea of a command based conversation implies three phases:
+<ul>
+<li><b>login via username and password</b>
+<p>A specific sequence (or lack thereof) is used to identify successful from unsuccessful logins - typically, something similar to "login incorrect".
+<p>
+<li><b>conversation proper</b>
+<p>Commands are issued on the output stream for the connection, and responsed are interpreted by consuming the input looking for particular conditions - typically dependent from the specific application which is accessed via telnet.
+<p>
+<li><b>logout</b>
+<p>A log-out command is send on the telnet stream - usually "logout" or "exit".
+</ul>
+The library supports this usage sequence by using, for login:
+<pre>
+     <font color="green">// Create a socket to the host</font>
+     Socket s = new Socket(telnetHost, 23);
+     <font color="green">// Create a UnixLoginHandler object over the socket to login to the host</font>
+     <A HREF="http://sadun-util.sourceforge.net/api/org/sadun/util/UnixLoginHandler.html" title="class in org.sadun.util"><CODE>UnixLoginHandler</CODE></A> handler = new <A HREF="http://sadun-util.sourceforge.net/api/org/sadun/util/UnixLoginHandler.html#UnixLoginHandler(java.net.Socket)"><CODE>UnixLoginHandler</CODE></A> UnixLoginHandler(s);
+     <font color="green">// Create a TelnetInputStreamConsumer object over the socket by logging in to the host</font>
+     <A HREF="http://sadun-util.sourceforge.net/api/org/sadun/util/TelnetInputStreamConsumer.html" title="class in org.sadun.util"><CODE>TelnetInputStreamConsumer</CODE></A> is = handler.<A HREF="http://sadun-util.sourceforge.net/api/org/sadun/util/UnixLoginHandler.html#doLogin(java.lang.String, java.lang.String)"><CODE>doLogin</CODE></A>(&quot;user&quot;,&quot;password&quot;);
+</pre>
+In order to carry on the conversation, a command is issued by simply sending it on the socket's outputstream (and using the telnet newline sequence \r\n):
+<pre>
+     String command="print hello"; <font color="green">// an imaginary "print" command available on the telnet interface</font>
+     PrintWriter pw = new PrintWriter(new OutputStreamWriter(s.getOutputStream()), true);
+     pw.print(command+"\r\n");
+</pre>
+<p>
+Usually, a command is expected to answer with a certain result and or within a certain timeout. <A HREF="http://sadun-util.sourceforge.net/api/org/sadun/util/TelnetInputStreamConsumer.html">TelnetInputStreamConsumer</a> offers methods that directly implement some interpretation strategies (<a href="http://sadun-util.sourceforge.net/api/org/sadun/util/TelnetInputStreamConsumer.html#consumeInput(long)">consumeInput(long)</a> for consuming all input within a timeout, <a href="http://sadun-util.sourceforge.net/api/org/sadun/util/TelnetInputStreamConsumer.html#consumeInput(java.util.regex.Pattern)">consumeInput(java.util.regex.Pattern)</a> for consuming input until a regular expression is matched, etc).
+<p>
+The most flexible way to define an interpretation strategy is by instantiating one or more <a href="http://sadun-util.sourceforge.net/api/org/sadun/util/TelnetInputStreamConsumer.Criterium.html">criteria</a> to define whether or not a certain command has been successful or has failed, combine them together by using a <a href="http://sadun-util.sourceforge.net/api/org/sadun/util/TelnetInputStreamConsumer.CompositeCriterium.html">composite criterium</a> (or any other of the predefined criterium classes) if necessary and use <a href="http://sadun-util.sourceforge.net/api/org/sadun/util/TelnetInputStreamConsumer.html#consumeByCriteria(org.sadun.util.TelnetInputStreamConsumer.Criterium)">consumeByCriteria</a> to consume input until a criterium is met.
+<p>
+For example:
+<pre>
+     <font color="green">// Create the success/failure criteria and make a composite one</font>
+     <a href="http://sadun-util.sourceforge.net/api/org/sadun/util/TelnetInputStreamConsumer.Criterium.html">TelnetInputStreamConsumer.Criterium</a> success = new TelnetInputStreamConsumer.ContainsStringCriterium("print ok");
+     <a href="http://sadun-util.sourceforge.net/api/org/sadun/util/TelnetInputStreamConsumer.Criterium.html">TelnetInputStreamConsumer.Criterium</a> failure = new TelnetInputStreamConsumer.ContainsStringCriterium("ERROR");
+     <a href="http://sadun-util.sourceforge.net/api/org/sadun/util/TelnetInputStreamConsumer.CompositeCriterium.html">TelnetInputStreamConsumer.CompositeCriterium</a> expectedResults =	new TelnetInputStreamConsumer.OrCriterium(
+       new TelnetInputStreamConsumer.Criterium[] { success, failure }
+     );
+
+     is.setConsumptionOperationsTimeout(10000); <font color="green">// We set a timeout of 10 secs anyway, in case the host blocks</font>
+
+     is.consumeByCriteria(expectedResults); <font color="green">// The actual output from the telnet host is returned here, so if necessary</font>
+                                            <font color="green">// it can be saved to be used later</font>
+
+     if (expectedResults.getHoldingCriterium() == success) {
+       <font color="darkgray">..everything ok...</font>
+     } else {
+       <font color="darkgray">..error...</font>
+     }
+</pre>
+Once done with the conversation, the logout operation is performed by
+<pre>
+     handler.doLogout(); <font color="green">// Use the default logout sequence</font>
+</pre>
+which also closes the socket.
+<p>
+<p>
+<b>4. More details</b>
+<p>
+More details on the specifics can be found directly in the javadoc documentation of the classes.
+Specifically, there are methods to alter how the login/logout sequences are performed, details on exceptions raised by the various methods etc.
+</font>
+</body>

@@ -1,0 +1,33 @@
+<html>
+<head>
+<title>The <version> Ant Task</title>
+</head>
+<body bgcolor=white text=navy>
+<font face="Helvetica" size=+3>
+The <b><code>&lt;version&gt;</code></b> Ant Task
+</font>v1.0<font size=-2> <a href="#changes">(change history)</a></font>
+<br>
+<font size=-3>
+<i>&copy; Copyright 2004 dr. Cristiano Sadun - this software is released under the Lesser General Public License.</i>
+</font>
+<hr>
+<font face="Helvetica">
+<div align="justify">
+<p>
+<b>1. Purpose</b>
+<p>
+<b>Version</b> is a task which automatically generates a compiled class encapsulating version and build number information.
+Version information are given as attribute values in the build files. The build number is automatically updated on every build.
+<p>
+<b>2. Usage</b>
+<p>
+As usual, a taskdef declaration must be put in the build file:
+<pre>
+    &lt;taskdef name="version" classname="org.sadun.util.ant.Version" classpath="lib\version.jar"/&gt;
+</pre>
+<p>
+<b>3. Packaging and runtime support</b>
+<p>
+The <b>Version</b> task is contained in a <tt>version.jar</tt> file, and so are the supporting classes <tt>org.sadun.util.Version</tt>
+and <tt>org.sadun.util.VersionImpl</tt>. T
+

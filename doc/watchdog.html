@@ -1,0 +1,77 @@
+<html>
+<head>
+<title>WatchDog</title>
+</head>
+<body bgcolor="white">
+<font face="Helvetica">
+<font color=navy size=+4><b>WatchDog component</b></font>
+<font size=-1>v1.1</font>
+<br><font size=-2><i>Copyright &copy; 2003 dr. Cristiano Sadun - This software is available under LGPL</i></font>
+<hr>
+<font size=-1>
+<a href="api/org/sadun/util/watchdog/package-summary.html">[WatchDog class API documentation]</a> <a href="api/org/sadun/util/watchdog/mbean/package-summary.html">[JMX ManagedWatchDog API documentation]</a>
+</font>
+<p>
+<b>1. Purpose</b>
+<p>
+This Java component can be used to <b>actively monitor resources and attempt to determine their state</b> on a periodic basis. It can be used as a common java class, but a JMX instrumentation is provided to allow control from a JMX console.
+<p>
+Once a resource is monitored, its state is notified to set of listeners implementing a specific <a href="api/org/sadun/util/watchdog/WatchDog.Listener.html">interface</a>. Depending on the state, such objects may raise an alarm, attempt to correct the state, etc.
+<p>
+<b>2. Usage</b>
+<p>
+The starting point is the Thread class <tt><a href="api/org/sadun/util/watchdog/WatchDog.html">org.sadun.util.watchdog.WatchDog</a></tt> which, once started, runs the periodic check and produces associated checking events to a <a href="api/org/sadun/util/watchdog/WatchDog.Listener.html">listener interface</a> until <a href="api/org/sadun/util/watchdog/WatchDog.html#shutdown()">shut down</a>. 
+<p>
+<tt><a href="api/org/sadun/util/watchdog/WatchDog.html">WatchDog</a></tt> is abstract on the <tt><a href="api/org/sadun/util/watchdog/WatchDog.html#doCheck(java.lang.Object)">doCheck(Object)</a></tt> method, which must be implemented by the developer to define the specific checking semantics.
+<p>
+<b>This method is be executed synchronously by the watchdog thread, so its execution time should be limited.</b> How to do this in practice depends much on the specific check - for example, a check requiring a socket connection can establish a timeout, or an I/O operation may need interruption if stays blocked for too long. 
+<p>
+Listener objects can be registed and deregistered by using the <tt><a href="api/org/sadun/util/watchdog/WatchDog.html#addListener(org.sadun.util.watchdog.WatchDog.Listener)">addListener</a></tt>
+and <tt><a href="api/org/sadun/util/watchdog/WatchDog.html#removeListener(org.sadun.util.watchdog.WatchDog.Listener)">removeListener</a></tt> methods.
+<p>
+<b>3. Check outcomes and the <a href="api/org/sadun/util/watchdog/WatchDog.Listener.html">listener interface</a></b>
+<p>
+ There are three possible outcomes from a check (not incidentally, associated to three method in the <a href="api/org/sadun/util/watchdog/WatchDog.Listener.html">listener interface</a>):
+<p>
+<ul>
+<li> <b>no problems have occurred</b> (check ok)
+<p>
+The monitored resource is in whatever state it is expected to be.
+The <tt><a href="api/org/sadun/util/watchdog/WatchDog.html#doCheck(java.lang.Object)">doCheck(Object)</a></tt> method must return <b>null</b> to indicate that no particular problem is detected.
+<p>
+<li> <b>some problems have occurred</b> (check failed)
+<p>
+The monitored resource is in a failed state. An appropriate <tt>java.lang.Throwable</tt> shall be returned by the <tt><a href="api/org/sadun/util/watchdog/WatchDog.html#doCheck(java.lang.Object)">doCheck(Object)</a></tt> method to indicate the nature of the problem. 
+<p>
+This throwable can either be simply an exception raised by the checking process (for example, if a socket connect() operation fails since a server is down, a <tt>java.net.ConnectException</tt> may have been raised); or a more complex exception containing detailed state of the failure point and associated values. 
+<p>
+<li> <b>the check itself has failed</b> (check impossible)
+<p>
+The known paths to the monitored resource were unavailable. A <tt><a href="api/org/sadun/util/watchdog/WatchDogException.html">WatchDogException</a></tt> shall be returned by the <tt><a href="api/org/sadun/util/watchdog/WatchDog.html#doCheck(java.lang.Object)">doCheck(Object)</a></tt> method, possibly containing an original exception describing the nature of the impossibility.
+</ul>
+<p>
+<i>
+Note that, depeding of the nature of the required check, the same physical event can be seen as either a failure or a check impossibility. For example, let's imagine we want to periodically monitor whether a process on a remote host is running a certain process or not. In this context, a connection timeout can depend from either the fact that the network down or the fact that the host or the process itself are down - it's a "check impossibility" rather than a failure, since we cannot determine whether the process is running on the remote host or not. On the other side, if the check consists exactly in determining if a host is reachable, the same timeout is definitely a "check failure".
+In the former case, we might want to wait and retry for a number of time before raising an alarm. In the latter, an alarm needs to be raised immediatly.
+<p>
+In simple cases, the distinction is ignored: the <tt><a href="api/org/sadun/util/watchdog/WatchDog.BaseListener.html">BaseListener</a></tt> partial implementation supports such cases.
+</i>
+<p>
+<b>4. Synchronous/Asynchronous notification mode</b>
+<p>
+When a check is complete, the <tt><a href="api/org/sadun/util/watchdog/WatchDog.html">WatchDog</a></tt> takes care of notifying all the registered listeners. The order of notification is unspecified.
+<p>
+By default, such notifications occur in the same thread as the <tt><a href="api/org/sadun/util/watchdog/WatchDog.html">WatchDog</a></tt> itself and are executed sequentially. Depending on the nature of the response implemented by the listeners, this may or may not be a feasible approach. For example, if a listener reacts to a failure simply by outputting a log entry, there's no problem in running it synchrnously; conversely, if it reacts by (for example) attempting to send an email, this can in itself be a long process (or fail entirely).
+<p>
+By running in asynchronous mode (by either invoking <a href="api/org/sadun/util/watchdog/WatchDog.html#setSynchronous(boolean)">setSynchronous(false)</a> before starting the thread or at <a href="api/org/sadun/util/watchdog/WatchDog.html#WatchDog(java.lang.String, long, boolean)">construction</a>), each listener executing thread will be decoupled from the WatchDog's - therefore insuring that
+a faulty or heavy listener does not block the watchdog or the other listeners.
+<p>
+<b>5. Architecture</b>
+<p>
+to be completed
+<p>
+<b>6. JMX instrumentation</b>
+<p>
+A JMX instrumentation is provided in the class <tt><a href="api/org/sadun/util/watchdog/mbean/ManagedWatchDog.html">org.sadun.util.watchdog.mbean.ManagedWatchDog</a></tt> (which in turns implements the standard MBean interface <tt><a href="api/org/sadun/util/watchdog/mbean/ManagedWatchDogMBean.html">org.sadun.util.watchdog.mbean.ManagedWatchDogMBean</a></tt>).
+<p>
+
